@@ -31,3 +31,36 @@ export async function fetchLocalAiLeaderboard(): Promise<LeaderboardEntry[]> {
     return [];
   }
 }
+
+export async function fetchPromoStatus(): Promise<string> {
+  try {
+    // Check both referrals and rules page for any explicit dates
+    const [refRes, rulesRes] = await Promise.all([
+      fetch('https://local.ai/referrals', { next: { revalidate: 3600 } }),
+      fetch('https://local.ai/referrals/rules', { next: { revalidate: 3600 } })
+    ]);
+    
+    let textToParse = "";
+    if (refRes.ok) textToParse += await refRes.text();
+    if (rulesRes.ok) textToParse += await rulesRes.text();
+    
+    const $ = cheerio.load(textToParse);
+    const fullText = $('body').text().replace(/\s+/g, ' ');
+    
+    // Look for explicit dates regarding the end of the promo
+    const dateMatch = fullText.match(/(ends on|cutoff is|until|deadline is|concludes on|closes on|finishes on|will end on|final day is|over on) ([a-zA-Z]+ \d{1,2}(st|nd|rd|th)?(,? \d{4})?)/i);
+    
+    if (dateMatch) {
+      return `Announced: ${dateMatch[0]}`;
+    }
+    
+    if (fullText.includes("Until public launch")) {
+      return "Until public launch (Cutoff to be announced)";
+    }
+    
+    return "Ongoing (No end date specified yet)";
+  } catch (error) {
+    console.error("Failed to fetch promo status:", error);
+    return "Unknown";
+  }
+}
